@@ -31,9 +31,18 @@ low stock, receipt/issue/adjustment validation. Backed by `DemoInventoryReposito
 Deliverable: unit tests covering every row of the §11 test table that does not
 need a database.
 
-## Milestone 4 — Screens on demo data (Prompt 2, brief §4)
-Dashboard, inventory, product details, receive, issue, adjust, reports, settings.
-Loading / empty / success / error states explicit.
+## Milestone 4 — Screens on demo data (Prompt 2, brief §4) — DONE
+Eleven routes: login, dashboard, inventory, product details, add/edit product,
+receive, issue, adjust, movement history, reports, settings. Loading / empty /
+success / error states explicit. Static export enabled and verified.
+
+Deferred out of this milestone, deliberately:
+- CSV/PDF export buttons -> milestone 7. The reports screen shows the data and
+  says so, rather than rendering a dead button (brief §14).
+- Users and roles management -> milestone 6. There are no users yet; the role
+  switcher in the sidebar is a testing aid and is labelled as one.
+- Charts -> milestone 7 if the data earns one. A bar chart of five products
+  says less than the table beneath it.
 
 ## Milestone 5 — Database + security (Prompt 4, brief §6, §8)
 Supabase migrations, UUID keys, constraints, indexes, Row Level Security,

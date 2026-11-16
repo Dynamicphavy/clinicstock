@@ -139,7 +139,7 @@ the least useful to build early — it displays numbers that other screens produ
 
 | Risk | Why it matters | Mitigation |
 |---|---|---|
-| Static export has no server runtime | server actions / API routes unavailable; tempting to leak a key | all privileged work in SQL functions; never a service-role key in the browser |
+| Static export has no server runtime | server actions / API routes unavailable; tempting to leak a key | all privileged work in SQL functions; never a service-role key in the browser. **Hit in milestone 4:** `/product/[id]` cannot work, because static export needs every id at build time via `generateStaticParams()` and our products live in per-clinic storage. Resolved by changing the URL to `/product?id=X`, read in the browser -- not by adding a server or leaking a key. `useSearchParams` also needs a `<Suspense>` boundary during prerender. |
 | RLS written late | retrofitting policies across 8 tables is error-prone | write policies in the same migration as each table |
 | Concurrency untested | the one bug that loses the clinic's trust | explicit two-session concurrent-issue test in milestone 8 |
 | Supabase Free: no automatic backups, project pausing | real clinic data could be lost | synthetic data only until backup/restore is tested and documented |

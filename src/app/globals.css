@@ -1,26 +1,71 @@
 @import "tailwindcss";
 
+/**
+ * Design tokens for the B2B direction in brief section 4: light background,
+ * dark navy text, restrained green accent, compact tables.
+ *
+ * Defined as CSS variables rather than scattered Tailwind colour classes so the
+ * clinic's palette can be changed in one place. "Restrained" is doing real work
+ * here -- green is reserved for a healthy status and the primary action, so when
+ * something IS green it means something.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --foreground: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+
+  --accent: #047857;
+  --accent-hover: #065f46;
+  --accent-soft: #ecfdf5;
+
+  /* Status colours. Chosen so each is distinguishable from the others by
+     LIGHTNESS as well as hue, which keeps the table readable for the ~8% of
+     men with red/green colour vision deficiency. Status is never communicated
+     by colour alone -- every badge carries a text label too. */
+  --danger: #b91c1c;
+  --danger-soft: #fef2f2;
+  --warn: #b45309;
+  --warn-soft: #fffbeb;
+  --info: #1d4ed8;
+  --info-soft: #eff6ff;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-muted: var(--muted);
+  --color-line: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /**
+   * System font stack rather than next/font/google.
+   *
+   * Two reasons. A Google font is fetched at BUILD time, so the build breaks on
+   * a restricted network -- and it is fetched again by every visitor at runtime.
+   * A clinic stock room on a slow connection renders faster with the font
+   * already on the device.
+   */
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Tabular figures keep quantity columns vertically aligned, so 1,000 and 999
+   line up digit for digit and a wrong magnitude is visible at a glance. */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }

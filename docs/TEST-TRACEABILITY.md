@@ -3,7 +3,7 @@
 Every row of the brief's acceptance table, and where it is verified.
 Run the suite with `npm test`.
 
-Status after Milestone 3: **63 passing, 3 deliberately deferred.**
+Status after Milestone 4: **77 passing, 3 deliberately deferred.**
 
 | § 11 test | Expected result | Covered by | Status |
 |---|---|---|---|
@@ -25,6 +25,13 @@ Status after Milestone 3: **63 passing, 3 deliberately deferred.**
 | Clinic A queries Clinic B | No data returned | demo-shape only; RLS test `it.todo` | **partial** |
 | Concurrent stock issue | No overselling | not testable in demo mode; `it.todo` | **deferred** |
 | CSV/PDF export | Correct filtered data | Milestone 7 | not started |
+
+Milestone 4 added `tests/inventoryView.test.ts` (14 tests) covering the numbers
+the screens display: row roll-ups, most-urgent status, total vs usable stock,
+active-only counts and search. These are not §11 rows, but they are where a
+"three screens disagree about the same number" bug would appear -- and the
+milestone 7 exports read the same functions, so the export totals cannot drift
+from the table.
 
 ## Why three tests are `it.todo` rather than passing
 

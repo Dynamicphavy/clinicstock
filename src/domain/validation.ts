@@ -178,3 +178,44 @@ export function checkReceiveAllowed(role: Role): Result<true> {
   }
   return ok(true);
 }
+
+/* ------------------------------------------------------------ product form */
+
+/**
+ * Product master record form.
+ *
+ * Lives beside the stock schemas, not in the component, so the SAME rules apply
+ * however a product is created -- the form today, a CSV import later, a test
+ * now. A schema defined inside a component is a rule that only exists while
+ * that component is mounted.
+ */
+export const productSchema = z.object({
+  name: z.string().trim().min(2, "Enter the product name."),
+  /**
+   * Uppercased and trimmed so "med-001" and "MED-001 " cannot both exist. The
+   * uniqueness check in the repository compares case-insensitively; normalising
+   * here means the stored value is predictable too.
+   */
+  sku: z
+    .string()
+    .trim()
+    .min(2, "Enter a SKU.")
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "Use letters, numbers, dot, dash or underscore.")
+    .transform((s) => s.toUpperCase()),
+  unit: z.string().trim().min(1, "Enter the counting unit, e.g. box or tablet."),
+  category_id: z.string().nullable(),
+  /**
+   * Zero is allowed: it means "never flag this as low". Negative is not -- it
+   * would make `total <= reorder_level` unsatisfiable and the product could
+   * never be flagged at all.
+   */
+  reorder_level: z
+    .number({ message: "Enter a reorder level." })
+    .int("Use a whole number.")
+    .min(0, "Cannot be negative."),
+  description: z.string().trim().nullable(),
+  is_active: z.boolean(),
+});
+
+export type ProductFormInput = z.input<typeof productSchema>;
+export type ProductFormOutput = z.output<typeof productSchema>;

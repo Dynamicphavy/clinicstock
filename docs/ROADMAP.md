@@ -44,10 +44,18 @@ Deferred out of this milestone, deliberately:
 - Charts -> milestone 7 if the data earns one. A bar chart of five products
   says less than the table beneath it.
 
-## Milestone 5 — Database + security (Prompt 4, brief §6, §8)
-Supabase migrations, UUID keys, constraints, indexes, Row Level Security,
-transactional SQL functions that lock the batch row.
-Deliverable: migrations + cross-tenant security tests.
+## Milestone 5 — Database + security (Prompt 4, brief §6, §8) — DONE
+Three migrations in `supabase/migrations/`: schema with constraints and indexes,
+RLS with role checks and an append-only trigger, and four transactional
+`SECURITY DEFINER` functions that lock the batch row.
+
+Verified by 46 tests against real PostgreSQL 18 (PGlite). See `docs/DATABASE.md`.
+
+Two of the three long-standing `it.todo`s are now genuinely covered: the
+database rejects a viewer's write, and cross-tenant reads return nothing. The
+third — overlapping issues cannot oversell — is implemented and still untested,
+because PGlite is a single connection. It needs a real server; moved to
+milestone 8.
 
 ## Milestone 6 — Connect app to database (Prompt 5)
 `SupabaseInventoryRepository` swapped in behind the same interface. UI unchanged.

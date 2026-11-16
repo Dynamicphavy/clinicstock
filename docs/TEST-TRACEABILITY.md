@@ -3,7 +3,7 @@
 Every row of the brief's acceptance table, and where it is verified.
 Run the suite with `npm test`.
 
-Status after Milestone 4: **77 passing, 3 deliberately deferred.**
+Status after Milestone 5: **123 passing, 2 deliberately deferred.**
 
 | § 11 test | Expected result | Covered by | Status |
 |---|---|---|---|
@@ -21,9 +21,9 @@ Status after Milestone 4: **77 passing, 3 deliberately deferred.**
 | Expiry 45 days away | Approaching expiry | `tests/expiry.test.ts` | pass |
 | Expiry date in past | Expired | `tests/expiry.test.ts` | pass |
 | No expiry date | No expiry recorded | `tests/expiry.test.ts` | pass |
-| Viewer tries to change stock | **Database** rejects it | client-side half covered; DB half `it.todo` | **partial** |
-| Clinic A queries Clinic B | No data returned | demo-shape only; RLS test `it.todo` | **partial** |
-| Concurrent stock issue | No overselling | not testable in demo mode; `it.todo` | **deferred** |
+| Viewer tries to change stock | **Database** rejects it | `tests/db/database.test.ts` → "a viewer cannot receive, issue or adjust stock" | **pass** |
+| Clinic A queries Clinic B | No data returned | `tests/db/database.test.ts` → "Clinic B queries Clinic A and gets NOTHING" | **pass** |
+| Concurrent stock issue | No overselling | `FOR UPDATE` implemented + presence asserted; overlap test needs two connections | **partial** |
 | CSV/PDF export | Correct filtered data | Milestone 7 | not started |
 
 Milestone 4 added `tests/inventoryView.test.ts` (14 tests) covering the numbers
@@ -33,7 +33,26 @@ active-only counts and search. These are not §11 rows, but they are where a
 milestone 7 exports read the same functions, so the export totals cannot drift
 from the table.
 
-## Why three tests are `it.todo` rather than passing
+## Milestone 5 added 46 database tests
+
+Run against real PostgreSQL 18, exercising the deployed migrations: schema
+constraints, RLS tenant isolation, the absence of any write policy on `batches`
+and `stock_movements`, the append-only triggers, all four stock functions, role
+enforcement and the self-elevation guard. `docs/DATABASE.md` explains the model
+and the one remaining gap.
+
+Two findings came out of writing them, both worth recording:
+
+1. **A test of mine was wrong, not the code.** Reversing the opening receipt
+   twice returned `INSUFFICIENT_STOCK`, not the unique-index violation I
+   expected — because undoing a +30 receipt twice would drive the balance to
+   −30, so the negative-balance guard fires first. Check order matters, and
+   asserting a *specific* error code is what surfaced it.
+2. **The harness shim had a bug.** Clearing `request.jwt.claims` to `''` made
+   `auth.uid()` raise on the jsonb cast instead of returning null. Real Supabase
+   leaves the claim unset; the shim now collapses both cases before casting.
+
+## Why the remaining tests are `it.todo` rather than passing
 
 This matters more than the 63 that pass, and §15 assesses exactly this kind of
 honesty ("Do not claim success without evidence").

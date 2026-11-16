@@ -372,10 +372,13 @@ describe("role permissions (usability layer, NOT the security boundary)", () => 
   /**
    * NOT A SECURITY TEST. This proves the buttons are correctly disabled, which
    * is a usability property. A determined user bypasses all of it from the
-   * console. The real test -- the database refusing the write -- belongs to
-   * milestone 5, against PostgreSQL RLS and the SQL functions.
+   * console by constructing the repository with role: "admin", because here the
+   * role is client-supplied data.
+   *
+   * DONE in milestone 5: the real test now lives in tests/db/database.test.ts,
+   * "a viewer cannot receive, issue or adjust stock" -- where the role is a row
+   * the user cannot write and the function reads it itself.
    */
-  it.todo("milestone 5: the DATABASE rejects a viewer's write, not just the client");
 });
 
 describe("tenant scoping (demo-mode shape only)", () => {
@@ -397,10 +400,11 @@ describe("tenant scoping (demo-mode shape only)", () => {
   /**
    * Brief section 11: "Clinic A queries Clinic B -> no data is returned".
    * Demo mode cannot honestly test this: one browser, one dataset, and the
-   * filtering is done by the same code being tested. Real tenant isolation is
-   * a Row Level Security property and gets a real test in milestone 5.
+   * filtering is done by the same code being tested.
+   *
+   * DONE in milestone 5: tests/db/database.test.ts, "Clinic B queries Clinic A
+   * and gets NOTHING" -- against real Row Level Security policies.
    */
-  it.todo("milestone 5: RLS denies cross-tenant reads at the database level");
 });
 
 describe("deferred to milestone 5", () => {
@@ -408,11 +412,14 @@ describe("deferred to milestone 5", () => {
    * Brief section 11: "Concurrent stock issue -> no overselling".
    * Untestable here, and NOT because it is hard -- because demo mode genuinely
    * cannot provide the guarantee. JavaScript has no row lock, so two tabs can
-   * interleave read-modify-write and oversell. Writing a passing "concurrency
-   * test" against this repository would manufacture false confidence in the
-   * exact area the brief calls the critical implementation rule.
+   * interleave read-modify-write and oversell.
+   *
+   * Milestone 5 implemented the fix (SELECT ... FOR UPDATE inside issue_stock)
+   * and proved the lock clause is deployed, but the overlapping-transaction
+   * test still cannot run: PGlite is a single connection. See the todo at the
+   * end of tests/db/database.test.ts -- it needs a real PostgreSQL server.
    */
-  it.todo("milestone 5: two concurrent issues cannot oversell (SELECT ... FOR UPDATE)");
+  it.todo("needs two real connections: overlapping issues cannot oversell");
 });
 
 describe("reset demo data", () => {

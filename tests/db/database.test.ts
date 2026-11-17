@@ -24,7 +24,10 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await db.close();
+  // Guarded: if freshDb() threw, `db` is undefined and an unguarded close()
+  // replaces the real error with "cannot read properties of undefined",
+  // which is how one broken migration looked like ten broken tests.
+  await db?.close();
 });
 
 /** Balance of one batch, read with RLS bypassed, for assertions. */
@@ -736,4 +739,166 @@ describe("concurrency", () => {
    * the security model and belongs in milestone 8's QA pass.
    */
   it.todo("two overlapping issues cannot oversell (needs two real connections)");
+});
+
+// ===========================================================================
+describe("onboarding (0004)", () => {
+// ===========================================================================
+
+  const NEW_USER = "ffffffff-0000-4000-8000-000000000001";
+
+  /** Simulates a Supabase sign-up: a row in auth.users and nothing else. */
+  async function signUp(id: string, email: string, fullName: string) {
+    await db.query(
+      // $3 needs an explicit ::text cast: jsonb_build_object is variadic
+      // "any", so PostgreSQL cannot infer a parameter's type from it and
+      // raises "could not determine data type of parameter $3".
+      `insert into auth.users (id, email, raw_user_meta_data)
+       values ($1, $2, jsonb_build_object('full_name', $3::text))`,
+      [id, email, fullName],
+    );
+  }
+
+  it("creates a profile automatically on sign-up", async () => {
+    await signUp(NEW_USER, "new@example.test", "New Person");
+    const r = await db.query<{ full_name: string; email: string }>(
+      "select full_name, email from profiles where id = $1",
+      [NEW_USER],
+    );
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0].full_name).toBe("New Person");
+    expect(r.rows[0].email).toBe("new@example.test");
+  });
+
+  it("a new user starts with no clinic and sees nothing", async () => {
+    await signUp(NEW_USER, "new@example.test", "New Person");
+    await asUser(db, NEW_USER, async () => {
+      expect((await db.query("select * from products")).rows).toHaveLength(0);
+      expect((await db.query("select * from organizations")).rows).toHaveLength(0);
+    });
+  });
+
+  it("lets a new user found a clinic and become its administrator", async () => {
+    await signUp(NEW_USER, "new@example.test", "New Person");
+    await asUser(db, NEW_USER, async () => {
+      const org = await db.query<{ id: string; name: string; timezone: string }>(
+        "select * from create_organization($1, $2)",
+        ["Riverside Clinic", "Africa/Lagos"],
+      );
+      expect(org.rows[0].name).toBe("Riverside Clinic");
+      expect(org.rows[0].timezone).toBe("Africa/Lagos");
+
+      const role = await db.query<{ role: string }>(
+        "select role from organization_members where user_id = $1",
+        [NEW_USER],
+      );
+      expect(role.rows[0].role).toBe("admin");
+
+      // And can immediately do admin work in their own clinic.
+      const product = await db.query(
+        `insert into products (organization_id, name, sku, unit)
+         values ($1, 'Gauze', 'CON-100', 'pack') returning id`,
+        [org.rows[0].id],
+      );
+      expect(product.rows).toHaveLength(1);
+    });
+  });
+
+  it("the founder's clinic is still invisible to everyone else", async () => {
+    await signUp(NEW_USER, "new@example.test", "New Person");
+    await asUser(db, NEW_USER, async () => {
+      await db.query("select create_organization($1)", ["Riverside Clinic"]);
+    });
+    // Tenant isolation must hold for a clinic created at runtime, not just for
+    // the ones the seed data set up.
+    await asUser(db, ADMIN_A, async () => {
+      const r = await db.query("select * from organizations where name = 'Riverside Clinic'");
+      expect(r.rows).toHaveLength(0);
+    });
+  });
+
+  it("refuses to create a clinic for an unauthenticated caller", async () => {
+    const err = await expectFailure(() =>
+      db.query("select create_organization($1)", ["Nobody's Clinic"]),
+    );
+    expect(err.detail).toBe("AUTH_REQUIRED");
+  });
+
+  it("refuses a blank name or an unknown timezone", async () => {
+    await signUp(NEW_USER, "new@example.test", "New Person");
+    await asUser(db, NEW_USER, async () => {
+      const blank = await expectFailure(() =>
+        db.query("select create_organization($1)", [" "]),
+      );
+      expect(blank.detail).toBe("INVALID_INPUT");
+
+      const tz = await expectFailure(() =>
+        db.query("select create_organization($1, $2)", ["Clinic", "Mars/Olympus"]),
+      );
+      expect(tz.detail).toBe("INVALID_INPUT");
+    });
+  });
+
+  it("still blocks adding yourself to a clinic that already has members", async () => {
+    // The founding exemption in 0004 is narrow: it applies only while an
+    // organisation has NO members. This is the attack it must still stop --
+    // brief section 3, "a user must not be able to grant themselves
+    // administrator privileges".
+    await signUp(NEW_USER, "new@example.test", "New Person");
+    await asUser(db, NEW_USER, async () => {
+      const err = await expectFailure(() =>
+        db.query(
+          `insert into organization_members (organization_id, user_id, role)
+           values ($1, $2, 'admin')`,
+          [ORG_A, NEW_USER],
+        ),
+      );
+      // I expected 42501 here, from the RLS policy. It is P0001 from the
+      // trigger, and PostgreSQL's order is the reason: a BEFORE trigger fires
+      // BEFORE the policy's WITH CHECK expression is evaluated, because the
+      // check applies to the final row the triggers produced. So the trigger
+      // always speaks first.
+      //
+      // Both layers would refuse this -- the user is not an admin of Clinic A
+      // either -- which is the point of having both. Worth knowing which one
+      // answers, though: the error a user sees comes from the trigger.
+      expect(err.detail).toBe("PERMISSION_DENIED");
+    });
+    const members = await db.query("select * from organization_members where user_id = $1", [NEW_USER]);
+    expect(members.rows).toHaveLength(0);
+  });
+
+  it("blocks a founder from re-adding themselves to their own clinic", async () => {
+    // This one DOES reach the trigger: the user is an admin of this clinic, so
+    // the policy lets the statement through, and the trigger is what stops it.
+    await signUp(NEW_USER, "new@example.test", "New Person");
+    let orgId = "";
+    await asUser(db, NEW_USER, async () => {
+      const org = await db.query<{ id: string }>("select * from create_organization($1)", ["Riverside"]);
+      orgId = org.rows[0].id;
+      const err = await expectFailure(() =>
+        db.query(
+          `insert into organization_members (organization_id, user_id, role)
+           values ($1, $2, 'viewer')`,
+          [orgId, NEW_USER],
+        ),
+      );
+      expect(err.detail).toBe("PERMISSION_DENIED");
+    });
+  });
+
+  it("seeds default categories only for an administrator", async () => {
+    await signUp(NEW_USER, "new@example.test", "New Person");
+    await asUser(db, NEW_USER, async () => {
+      const org = await db.query<{ id: string }>("select * from create_organization($1)", ["Riverside"]);
+      const cats = await db.query("select * from seed_default_categories($1)", [org.rows[0].id]);
+      expect(cats.rows).toHaveLength(3);
+    });
+    await asUser(db, VIEWER_A, async () => {
+      const err = await expectFailure(() =>
+        db.query("select seed_default_categories($1)", [ORG_A]),
+      );
+      expect(err.detail).toBe("PERMISSION_DENIED");
+    });
+  });
 });

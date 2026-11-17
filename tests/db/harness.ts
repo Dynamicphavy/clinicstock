@@ -31,7 +31,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 
-const MIGRATIONS = ["0001_schema.sql", "0002_rls.sql", "0003_functions.sql"];
+const MIGRATIONS = [
+  "0001_schema.sql",
+  "0002_rls.sql",
+  "0003_functions.sql",
+  "0004_onboarding.sql",
+];
 
 /** Recreates the parts of a Supabase project our migrations rely on. */
 const SUPABASE_SHIM = `
@@ -42,8 +47,11 @@ const SUPABASE_SHIM = `
   create schema if not exists auth;
 
   create table auth.users (
-    id    uuid primary key,
-    email text
+    id                 uuid primary key,
+    email              text,
+    -- Supabase stores sign-up metadata here; the 0004 trigger reads full_name
+    -- out of it.
+    raw_user_meta_data jsonb
   );
 
   -- Supabase's own definition: the 'sub' claim of the verified JWT.
@@ -99,17 +107,13 @@ const SEED = `
     ('${ORG_A}', 'Clinic A', 'Africa/Lagos'),
     ('${ORG_B}', 'Clinic B', 'UTC');
 
-  insert into auth.users (id, email) values
-    ('${ADMIN_A}',   'admin.a@example.test'),
-    ('${OFFICER_A}', 'officer.a@example.test'),
-    ('${VIEWER_A}',  'viewer.a@example.test'),
-    ('${ADMIN_B}',   'admin.b@example.test');
-
-  insert into profiles (id, full_name, email) values
-    ('${ADMIN_A}',   'Admin A',   'admin.a@example.test'),
-    ('${OFFICER_A}', 'Officer A', 'officer.a@example.test'),
-    ('${VIEWER_A}',  'Viewer A',  'viewer.a@example.test'),
-    ('${ADMIN_B}',   'Admin B',   'admin.b@example.test');
+  -- No explicit profiles insert: the on_auth_user_created trigger from 0004
+  -- creates them, so every test run exercises that trigger.
+  insert into auth.users (id, email, raw_user_meta_data) values
+    ('${ADMIN_A}',   'admin.a@example.test',   '{"full_name":"Admin A"}'),
+    ('${OFFICER_A}', 'officer.a@example.test', '{"full_name":"Officer A"}'),
+    ('${VIEWER_A}',  'viewer.a@example.test',  '{"full_name":"Viewer A"}'),
+    ('${ADMIN_B}',   'admin.b@example.test',   '{"full_name":"Admin B"}');
 
   insert into organization_members (organization_id, user_id, role) values
     ('${ORG_A}', '${ADMIN_A}',   'admin'),

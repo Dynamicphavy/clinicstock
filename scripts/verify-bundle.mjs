@@ -52,4 +52,44 @@ if (unprotected.rows.length > 0) {
 }
 console.log("every public table has row level security enabled");
 
+// 0005: anon must hold no privileges on application tables or functions.
+// Supabase's default privileges grant them automatically, so this is checked
+// rather than trusted -- it is the exact divergence that let the live project
+// run on one lock instead of two.
+const anonTables = await db.query(
+  `select table_name from information_schema.role_table_grants
+   where grantee = 'anon' and table_schema = 'public'`,
+);
+if (anonTables.rows.length > 0) {
+  console.error("anon STILL HAS TABLE GRANTS:", [...new Set(anonTables.rows.map((r) => r.table_name))].join(", "));
+  process.exit(1);
+}
+
+const anonFns = await db.query(
+  `select p.proname from pg_proc p
+   join pg_namespace ns on ns.oid = p.pronamespace
+   where ns.nspname = 'public'
+     and has_function_privilege('anon', p.oid, 'execute')`,
+);
+if (anonFns.rows.length > 0) {
+  console.error("anon CAN STILL EXECUTE:", anonFns.rows.map((r) => r.proname).join(", "));
+  process.exit(1);
+}
+console.log("anon holds no table or function privileges");
+
+// And the two tables that must never be writable by anyone.
+const writable = await db.query(
+  `select distinct table_name, privilege_type
+   from information_schema.role_table_grants
+   where table_schema = 'public'
+     and table_name in ('batches', 'stock_movements')
+     and privilege_type in ('INSERT', 'UPDATE', 'DELETE')
+     and grantee in ('anon', 'authenticated')`,
+);
+if (writable.rows.length > 0) {
+  console.error("STOCK TABLES ARE WRITABLE:", writable.rows.map((r) => r.table_name + "/" + r.privilege_type).join(", "));
+  process.exit(1);
+}
+console.log("batches and stock_movements have no write grant for any client role");
+
 await db.close();

@@ -333,12 +333,16 @@ describe("receive_stock", () => {
 
   it("takes the organisation from the product, not from the caller", async () => {
     // Clinic B's admin naming Clinic A's product. The function resolves the org
-    // from the product row, finds Clinic B holds no role there, and refuses.
+    // from the product row and finds Clinic B is not a member.
+    //
+    // Reported as PRODUCT_NOT_FOUND, not PERMISSION_DENIED (changed in 0005):
+    // "permission denied" would confirm the product exists. Absent and
+    // not-yours must look identical from outside.
     await asUser(db, ADMIN_B, async () => {
       const err = await expectFailure(() =>
         db.query(`select receive_stock($1, 'CROSS', 10, current_date, null)`, [PRODUCT_A]),
       );
-      expect(err.detail).toBe("PERMISSION_DENIED");
+      expect(err.detail).toBe("PRODUCT_NOT_FOUND");
     });
     const r = await db.query("select * from batches where batch_number = 'CROSS'");
     expect(r.rows).toHaveLength(0);
@@ -635,13 +639,34 @@ describe("role enforcement, at the database", () => {
     });
   });
 
-  it("a user with no membership is refused", async () => {
+  it("a user from another clinic is told the batch does not exist", async () => {
+    // This assertion is REVERSED from milestone 5, and the old comment was
+    // wrong. It said PERMISSION_DENIED meant the caller "learns nothing about
+    // whether it exists" -- but permission-denied confirms it exists. The
+    // honest answer is the one a non-existent id would give.
     await asUser(db, ADMIN_B, async () => {
       const err = await expectFailure(() =>
         db.query("select issue_stock($1, 1, 'Ward usage')", [BATCH_A_GOOD]),
       );
-      // Not BATCH_NOT_FOUND: they are told nothing about whether it exists.
-      expect(err.detail).toBe("PERMISSION_DENIED");
+      expect(err.detail).toBe("BATCH_NOT_FOUND");
+    });
+  });
+
+  it("gives an outsider the SAME answer for a real and a fake batch id", async () => {
+    // The actual property we want, stated directly: the two responses must be
+    // indistinguishable. Asserting each code separately would not catch a
+    // future change that made them differ again.
+    await asUser(db, ADMIN_B, async () => {
+      const real = await expectFailure(() =>
+        db.query("select issue_stock($1, 1, 'Ward usage')", [BATCH_A_GOOD]),
+      );
+      const fake = await expectFailure(() =>
+        db.query("select issue_stock($1, 1, 'Ward usage')", [
+          "00000000-0000-4000-8000-00000000beef".replace("beef", "0000"),
+        ]),
+      );
+      expect(real.detail).toBe(fake.detail);
+      expect(real.message).toBe(fake.message);
     });
   });
 
@@ -899,6 +924,119 @@ describe("onboarding (0004)", () => {
         db.query("select seed_default_categories($1)", [ORG_A]),
       );
       expect(err.detail).toBe("PERMISSION_DENIED");
+    });
+  });
+});
+
+// ===========================================================================
+describe("hardening (0005)", () => {
+// ===========================================================================
+
+  it("authenticates BEFORE looking anything up", async () => {
+    // The flaw the live project revealed: with no JWT and a random UUID,
+    // issue_stock used to answer BATCH_NOT_FOUND -- so an anonymous caller
+    // could tell a real batch id from a fake one, because a real one in
+    // another clinic answered PERMISSION_DENIED instead.
+    //
+    // An existence oracle, served to someone who has not signed in.
+    await asUser(db, ADMIN_A, async () => {
+      await db.exec("select set_config('request.jwt.claims', '', false);");
+      for (const [sql, params] of [
+        ["select issue_stock($1, 1, 'Ward usage')", ["00000000-0000-4000-8000-000000000000"]],
+        ["select issue_stock($1, 1, 'Ward usage')", [BATCH_A_GOOD]],
+        ["select adjust_stock($1, -1, 'Recount')", [BATCH_A_GOOD]],
+        ["select reverse_movement($1, 'Mistake')", ["00000000-0000-4000-8000-000000000000"]],
+        ["select receive_stock($1, 'X', 1, current_date, null)", [PRODUCT_A]],
+      ] as [string, unknown[]][]) {
+        const err = await expectFailure(() => db.query(sql, params));
+        // Same answer whether the id is real or invented.
+        expect(err.detail).toBe("AUTH_REQUIRED");
+      }
+    });
+  });
+
+  it("rejects a bad quantity only AFTER authenticating", async () => {
+    // Input validation also leaks: an anonymous caller who learns their
+    // quantity was rejected has learned the endpoint is reachable. Auth first,
+    // everything else after.
+    await asUser(db, ADMIN_A, async () => {
+      await db.exec("select set_config('request.jwt.claims', '', false);");
+      const err = await expectFailure(() =>
+        db.query("select issue_stock($1, -5, '')", [BATCH_A_GOOD]),
+      );
+      expect(err.detail).toBe("AUTH_REQUIRED");
+    });
+  });
+
+  it("gives anon no table privileges at all", async () => {
+    // Supabase's default privileges had granted anon ALL on every public table.
+    // RLS was refusing every row, so nothing leaked -- but the design called
+    // for two locks and production was running on one.
+    await db.exec("set role anon;");
+    try {
+      for (const t of ["products", "batches", "stock_movements", "organizations"]) {
+        const err = await expectFailure(() => db.query(`select * from ${t} limit 1`));
+        // "permission denied for table X" -- the grant is gone, so RLS is not
+        // even consulted. Distinct from an RLS refusal, which returns no rows.
+        expect(err.message).toMatch(/permission denied for table/i);
+      }
+    } finally {
+      await db.exec("reset role;");
+    }
+  });
+
+  it("gives anon no execute privilege on the stock functions", async () => {
+    await db.exec("set role anon;");
+    try {
+      const err = await expectFailure(() =>
+        db.query("select issue_stock($1, 1, 'Ward usage')", [BATCH_A_GOOD]),
+      );
+      expect(err.message).toMatch(/permission denied for function/i);
+    } finally {
+      await db.exec("reset role;");
+    }
+  });
+
+  it("denies batch writes by GRANT, not merely by policy", async () => {
+    // Both locks, verified separately. Before 0005 this failed with "new row
+    // violates row-level security policy" -- correct, but one lock deep.
+    await asUser(db, ADMIN_A, async () => {
+      const update = await expectFailure(() =>
+        db.query("update batches set quantity_on_hand = 999 where id = $1", [BATCH_A_GOOD]),
+      );
+      expect(update.message).toMatch(/permission denied for table batches/i);
+
+      const insert = await expectFailure(() =>
+        db.query(
+          `insert into stock_movements (organization_id, batch_id, movement_type,
+                                        quantity_delta, reason, performed_by)
+           values ($1, $2, 'issue', -5, 'Invented', $3)`,
+          [ORG_A, BATCH_A_GOOD, ADMIN_A],
+        ),
+      );
+      expect(insert.message).toMatch(/permission denied for table stock_movements/i);
+    });
+    expect(await balance(BATCH_A_GOOD)).toBe(30);
+  });
+
+  it("still lets the legitimate paths work", async () => {
+    // A hardening migration that quietly breaks the app is worse than the flaw
+    // it fixed, so the happy path is re-asserted after every revoke.
+    await asUser(db, OFFICER_A, async () => {
+      const issued = await db.query<{ quantity_on_hand: number }>(
+        "select * from issue_stock($1, 5, 'Ward usage')",
+        [BATCH_A_GOOD],
+      );
+      expect(issued.rows[0].quantity_on_hand).toBe(25);
+
+      const received = await db.query<{ quantity_on_hand: number }>(
+        "select * from receive_stock($1, 'POST-0005', 60, current_date, current_date + 200)",
+        [PRODUCT_A],
+      );
+      expect(received.rows[0].quantity_on_hand).toBe(60);
+
+      const products = await db.query("select * from products");
+      expect(products.rows).toHaveLength(1);
     });
   });
 });

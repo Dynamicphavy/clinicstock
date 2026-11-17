@@ -36,6 +36,7 @@ const MIGRATIONS = [
   "0002_rls.sql",
   "0003_functions.sql",
   "0004_onboarding.sql",
+  "0005_harden.sql",
 ];
 
 /** Recreates the parts of a Supabase project our migrations rely on. */
@@ -74,6 +75,24 @@ const SUPABASE_SHIM = `
 
   grant usage on schema auth to anon, authenticated, service_role;
   grant select on auth.users to authenticated;
+
+  -- CRITICAL for these tests to mean anything.
+  --
+  -- A hosted Supabase project ships with default privileges that grant every
+  -- new object in 'public' to anon and authenticated. Without replicating that
+  -- here, the local database is STRICTER than production -- which is how the
+  -- milestone 5 suite passed while the live project had anon holding INSERT on
+  -- every table (see 0005_harden.sql).
+  --
+  -- A test environment that is more locked down than production tests a system
+  -- nobody runs.
+  grant usage on schema public to anon, authenticated, service_role;
+  alter default privileges in schema public
+    grant all on tables to anon, authenticated, service_role;
+  alter default privileges in schema public
+    grant all on functions to anon, authenticated, service_role;
+  alter default privileges in schema public
+    grant all on sequences to anon, authenticated, service_role;
 `;
 
 /* Fixed ids so failures name something recognisable rather than a random uuid. */

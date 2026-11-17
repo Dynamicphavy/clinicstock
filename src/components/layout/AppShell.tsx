@@ -12,6 +12,7 @@ import {
   ClipboardList,
   FileText,
   LayoutDashboard,
+  LogOut,
   Package,
   Settings,
   SlidersHorizontal,
@@ -47,7 +48,7 @@ const ROLE_LABEL: Record<Role, string> = {
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { role, setRole, clinicName } = useSession();
+  const { role, setRole, clinicName, mode, user, signOut } = useSession();
   const pathname = usePathname();
 
   const visible = NAV.filter((item) => !item.requires || can(role, item.requires));
@@ -57,13 +58,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/**
        * The DEMO banner, required by brief section 9.
        *
-       * Not dismissible, and at the very top of every page. The point is that
-       * nobody can mistake this build for a real clinic record system -- which
-       * is a real risk once the screens look finished.
+       * Demo mode ONLY. Not dismissible there, so nobody can mistake a
+       * localStorage demo for a real record system. In cloud mode it is
+       * removed rather than reworded: this is a real clinic's real stock, and
+       * a banner calling it synthetic would be its own kind of lie.
        */}
-      <div className="bg-warn-soft border-b border-warn/25 px-4 py-2 text-center text-xs font-medium text-warn">
-        DEMO MODE &middot; synthetic data in this browser only &middot; not for real clinic records
-      </div>
+      {mode === "demo" ? (
+        <div className="bg-warn-soft border-b border-warn/25 px-4 py-2 text-center text-xs font-medium text-warn">
+          DEMO MODE &middot; synthetic data in this browser only &middot; not for real clinic records
+        </div>
+      ) : null}
 
       <div className="mx-auto flex max-w-7xl flex-col gap-0 md:flex-row">
         {/* Sidebar on desktop, horizontal scroller on mobile: the brief asks for
@@ -115,24 +119,48 @@ export function AppShell({ children }: { children: React.ReactNode }) {
            * privileges." This control must not survive into milestone 6.
            */}
           <div className="mt-auto border-t border-line px-4 py-3">
-            <label htmlFor="demo-role" className="block text-xs font-medium text-muted">
-              Demo: act as
-            </label>
-            <Select
-              id="demo-role"
-              value={role}
-              onChange={(e) => setRole(e.target.value as Role)}
-              className="mt-1.5 text-xs"
-            >
-              {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABEL[r]}
-                </option>
-              ))}
-            </Select>
-            <p className="mt-1.5 text-[11px] leading-snug text-muted">
-              Demo control only. Real roles come from the database.
-            </p>
+            {mode === "demo" ? (
+              <>
+                <label htmlFor="demo-role" className="block text-xs font-medium text-muted">
+                  Demo: act as
+                </label>
+                <Select
+                  id="demo-role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as Role)}
+                  className="mt-1.5 text-xs"
+                >
+                  {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABEL[r]}
+                    </option>
+                  ))}
+                </Select>
+                <p className="mt-1.5 text-[11px] leading-snug text-muted">
+                  Demo control only. Real roles come from the database.
+                </p>
+              </>
+            ) : (
+              /**
+               * In cloud mode the role is DISPLAYED, never chosen. It comes
+               * from organization_members, a row the user cannot write, and
+               * every stock function re-reads it server-side. Brief section 3:
+               * "A user must not be able to grant themselves administrator
+               * privileges."
+               */
+              <>
+                <p className="truncate text-xs font-medium text-foreground" title={user?.email ?? ""}>
+                  {user?.email ?? "Signed in"}
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted">{ROLE_LABEL[role]}</p>
+                <button
+                  onClick={() => void signOut()}
+                  className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-background"
+                >
+                  <LogOut size={13} aria-hidden /> Sign out
+                </button>
+              </>
+            )}
           </div>
         </aside>
 

@@ -55,3 +55,31 @@ export function todayInClinic(now: Date = new Date()): DateOnly {
   const d = String(now.getDate()).padStart(2, "0");
   return y + "-" + m + "-" + d;
 }
+
+/**
+ * Today in a specific IANA timezone, e.g. "Africa/Lagos".
+ *
+ * In cloud mode the clinic's timezone is a column on `organizations`, so the UI
+ * can agree with the database about what day it is. The SQL functions compute
+ * their own date server-side from the same column and do not trust this value
+ * -- if the two ever disagree, the database wins and the UI is simply showing a
+ * stale day.
+ *
+ * "en-CA" is not a style choice: that locale formats dates as YYYY-MM-DD, which
+ * is exactly our DateOnly shape. Building the string by hand from
+ * toLocaleString parts is where off-by-one bugs creep back in.
+ */
+export function todayInTimezone(timeZone: string, now: Date = new Date()): DateOnly {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+  } catch {
+    // An unknown timezone throws. Falling back to the device's date is wrong by
+    // at most a day and keeps the app usable; the database remains authoritative.
+    return todayInClinic(now);
+  }
+}

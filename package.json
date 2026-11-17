@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "sql:bundle": "node scripts/bundle-sql.mjs",
-    "sql:verify": "node scripts/verify-bundle.mjs"
+    "sql:verify": "node scripts/verify-bundle.mjs",
+    "verify:live": "node --env-file=.env.local scripts/verify-live.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^7.0.6",

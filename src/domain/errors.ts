@@ -29,7 +29,18 @@ export type DomainErrorCode =
   | "EXPIRY_BEFORE_RECEIPT"
   | "PERMISSION_DENIED"
   | "CROSS_TENANT_DENIED"
-  | "INVALID_INPUT";
+  | "INVALID_INPUT"
+  /* Codes the database and the network can produce but localStorage cannot.
+     Brief section 7 requires clear messages for "permission denied, session
+     expired, conflict and unavailable service" -- so each is its own code
+     rather than all collapsing into one "something went wrong". */
+  | "AUTH_REQUIRED"
+  | "SESSION_EXPIRED"
+  | "MOVEMENT_NOT_FOUND"
+  | "APPEND_ONLY_VIOLATION"
+  | "CONFLICT"
+  | "NETWORK_UNAVAILABLE"
+  | "SERVICE_UNAVAILABLE";
 
 export interface DomainError {
   code: DomainErrorCode;

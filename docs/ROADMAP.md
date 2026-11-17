@@ -57,9 +57,23 @@ third — overlapping issues cannot oversell — is implemented and still untest
 because PGlite is a single connection. It needs a real server; moved to
 milestone 8.
 
-## Milestone 6 — Connect app to database (Prompt 5)
-`SupabaseInventoryRepository` swapped in behind the same interface. UI unchanged.
-Auth, org membership, role-aware UI.
+## Milestone 6 — Connect app to database (Prompt 5) — CODE DONE, NOT YET EXERCISED
+`SupabaseInventoryRepository` behind the same `InventoryRepository` interface.
+**No screen from milestone 4 changed** — that was the point of the seam.
+
+Added: Supabase browser client with a secret-key guard, PostgREST-to-DomainError
+mapping, dual-mode session provider (demo | cloud), auth gate, sign-in/sign-up,
+and a found-a-clinic flow calling `create_organization()`.
+
+Verified: typecheck, lint, 139 tests, static build of 15 routes, and
+`npm run verify:live` — anon locked out of all 8 tables and all 6 functions, and
+every RPC argument name matches the deployed signature (with a control case
+proving that check can fail).
+
+NOT verified: no signed-in request has been made. The reads, the membership
+lookup and the stock functions have not run against live data. Requires signing
+in through the browser, which needs the emailed confirmation link while
+`mailer_autoconfirm` is off.
 
 ## Milestone 7 — Reports (Prompt 6)
 CSV via PapaParse, PDF via jsPDF, filters, totals that match source records.

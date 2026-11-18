@@ -3,7 +3,7 @@
 Every row of the brief's acceptance table, and where it is verified.
 Run the suite with `npm test`.
 
-Status after Milestone 5: **123 passing, 2 deliberately deferred.**
+Status after Milestone 7: **170 passing, 2 deliberately deferred.**
 
 | § 11 test | Expected result | Covered by | Status |
 |---|---|---|---|
@@ -24,7 +24,7 @@ Status after Milestone 5: **123 passing, 2 deliberately deferred.**
 | Viewer tries to change stock | **Database** rejects it | `tests/db/database.test.ts` → "a viewer cannot receive, issue or adjust stock" | **pass** |
 | Clinic A queries Clinic B | No data returned | `tests/db/database.test.ts` → "Clinic B queries Clinic A and gets NOTHING" | **pass** |
 | Concurrent stock issue | No overselling | `FOR UPDATE` implemented + presence asserted; overlap test needs two connections | **partial** |
-| CSV/PDF export | Correct filtered data | Milestone 7 | not started |
+| CSV/PDF export | Correct filtered data and totals | `tests/reports.test.ts` (31 tests) | **pass** |
 
 Milestone 4 added `tests/inventoryView.test.ts` (14 tests) covering the numbers
 the screens display: row roll-ups, most-urgent status, total vs usable stock,

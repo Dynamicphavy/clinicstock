@@ -92,8 +92,20 @@ for milestone 8:
 A service-role key is NOT an option: it bypasses RLS, so a suite using one
 would prove nothing about the policies it is meant to be testing.
 
-## Milestone 7 — Reports (Prompt 6)
-CSV via PapaParse, PDF via jsPDF, filters, totals that match source records.
+## Milestone 7 — Reports (Prompt 6) — DONE
+Five reports (inventory, low stock, expiry, movements, adjustments), category /
+product / date filters, CSV via PapaParse and PDF via jsPDF.
+
+The design point: `src/domain/reports.ts` builds a `ReportTable`, and the
+screen, the CSV and the PDF all RENDER that one object. None of them computes
+anything. Section 11 asks that exported totals match the source records, and
+the reliable way to get that is not care applied three times -- it is making
+disagreement structurally impossible. Milestone 4's screen built its tables
+inline in JSX, which would have forced the exporters to re-derive every sum.
+
+31 tests, asserting the export against the SOURCE rather than against expected
+strings: a test that says "the total is 140" passes a report that sums the
+wrong column whenever 140 happens to be right.
 
 ## Milestone 8 — QA, security review, deployment (Prompts 7, 8)
 Full §11 test pass, concurrency test, static export, Cloudflare Pages,

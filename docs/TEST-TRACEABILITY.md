@@ -67,6 +67,15 @@ none. Milestone 8 should close it with a test user the suite can authenticate
 as -- never with a service-role key, which bypasses the RLS the tests exist to
 check.
 
+The download mechanism, for the same reason. `reportToCsv` and `reportToPdf`
+are tested against the source data (31 tests), but `triggerDownload` -- the
+blob, the object URL and the programmatic click on a hidden anchor -- cannot
+run in Node. Verified by a person on 2026-11-18 in Chrome: all five reports,
+category and product filters, both formats; filenames correct, CSV context
+block intact and free of encoding damage, PDF paginated with correct page
+counts, both buttons disabled on an empty result. Same caveat as above -- it
+worked once, which is not the same as it works.
+
 ## Why the remaining tests are `it.todo` rather than passing
 
 This matters more than the 63 that pass, and §15 assesses exactly this kind of

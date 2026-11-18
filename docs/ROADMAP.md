@@ -57,7 +57,7 @@ third — overlapping issues cannot oversell — is implemented and still untest
 because PGlite is a single connection. It needs a real server; moved to
 milestone 8.
 
-## Milestone 6 — Connect app to database (Prompt 5) — CODE DONE, NOT YET EXERCISED
+## Milestone 6 — Connect app to database (Prompt 5) — DONE (manually verified)
 `SupabaseInventoryRepository` behind the same `InventoryRepository` interface.
 **No screen from milestone 4 changed** — that was the point of the seam.
 
@@ -70,10 +70,27 @@ Verified: typecheck, lint, 139 tests, static build of 15 routes, and
 every RPC argument name matches the deployed signature (with a control case
 proving that check can fail).
 
-NOT verified: no signed-in request has been made. The reads, the membership
-lookup and the stock functions have not run against live data. Requires signing
-in through the browser, which needs the emailed confirmation link while
-`mailer_autoconfirm` is off.
+Confirmed by hand on 2026-11-18: sign-up, email confirmation, sign-in, founding
+a clinic, adding a product, duplicate-SKU rejection, receiving a batch, issuing
+stock, insufficient-stock rejection and movement history all worked against the
+live project. That closes the three unknowns from the code drop -- the embedded
+membership query, the RPC round trips, and the PostgREST-to-DomainError mapping.
+
+STILL NOT AUTOMATED, and worth being precise about: that was a MANUAL pass. No
+automated test signs in. Everything behind authentication -- the reads, the role
+lookup, the four stock functions over the wire -- is covered only by a person
+clicking through it once, which does not survive a refactor and will not run in
+CI. The 139 automated tests cover the domain layer and the database directly;
+the signed-in client path has none.
+
+Closing that needs a test user the suite can authenticate as. Two routes, both
+for milestone 8:
+  * turn on `mailer_autoconfirm` in a dedicated test project and sign up a
+    throwaway user per run;
+  * or run the whole stack locally with the Supabase CLI (needs Docker) and
+    seed a confirmed user directly.
+A service-role key is NOT an option: it bypasses RLS, so a suite using one
+would prove nothing about the policies it is meant to be testing.
 
 ## Milestone 7 — Reports (Prompt 6)
 CSV via PapaParse, PDF via jsPDF, filters, totals that match source records.

@@ -52,6 +52,21 @@ Two findings came out of writing them, both worth recording:
    `auth.uid()` raise on the jsonb cast instead of returning null. Real Supabase
    leaves the claim unset; the shim now collapses both cases before casting.
 
+## What has no automated coverage at all
+
+The signed-in client path. Milestone 6 was verified by a person clicking
+through sign-up, clinic creation, product entry, receipt, issue and history
+against the live project on 2026-11-18, and it all worked -- but a manual pass
+is not a test. It does not survive a refactor, it does not run in CI, and it
+proves the code worked once rather than that it works.
+
+The gap is specific: `SupabaseInventoryRepository`, the membership lookup and
+the auth gate have no test of their own. The domain logic underneath them has
+77, and the database beneath that has 62; the layer that joins the two has
+none. Milestone 8 should close it with a test user the suite can authenticate
+as -- never with a service-role key, which bypasses the RLS the tests exist to
+check.
+
 ## Why the remaining tests are `it.todo` rather than passing
 
 This matters more than the 63 that pass, and §15 assesses exactly this kind of

@@ -4,7 +4,11 @@ import { DemoSessionProvider } from "@/app/providers";
 
 export const metadata: Metadata = {
   title: "ClinicStock",
-  description: "Inventory management for small clinics. Demo build, synthetic data.",
+  // Mode-neutral: this build may run against a real clinic's database, so the
+  // description must not claim the data is synthetic. The DEMO banner in
+  // AppShell is where that claim belongs, and it renders only in demo mode.
+  description:
+    "Inventory management for small clinics: products, batches, expiry monitoring and auditable stock movements.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

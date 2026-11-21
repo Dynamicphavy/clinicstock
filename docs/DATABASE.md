@@ -75,38 +75,41 @@ tests assert on these specific codes — never merely that something failed.
 
 ## What is NOT verified
 
-**The overlapping-issue concurrency test.** This is the only claim in the
-security model without a behavioural test, and the gap is the harness, not the
-code.
+**The overlapping-issue concurrency test -- now verified (Milestone 8).**
+`tests/concurrency/issue-race.test.ts` starts a real PostgreSQL 18.6 server
+(`embedded-postgres`, user-space, no Docker) and races real connections against
+the byte-identical migrations:
 
-`issue_stock` does `SELECT ... FOR UPDATE` before validating, and a test asserts
-that clause is present in the deployed function body. But PGlite is a single
-connection: one backend process, no second session, so two transactions cannot
-contend for a lock. The race cannot be reproduced here, and a passing
-"concurrency test" written against this harness would be precisely the false
-confidence this project has been careful to avoid.
+- One session holds the batch lock in an open transaction; a second calls
+  `issue_stock` and is confirmed, via `pg_stat_activity`, to be **blocked on a
+  lock**: evidence, not a sleep. After the first commits, the second is
+  refused with `INSUFFICIENT_STOCK`.
+- Ten simultaneous issues of 5 from 30: exactly six succeed, four are
+  refused, balance 0, deltas sum to the balance.
+- A **control**: the same race against a copy of `issue_stock` with
+  `FOR UPDATE` removed. It must, and does, produce a different outcome.
 
-To close it, on a real PostgreSQL server (`docker run -p 5432:5432 postgres:18`,
-a local install, or a Supabase branch):
+**What the control revealed.** The data was correct *even without the lock*.
+`issue_stock` decrements relatively (`quantity_on_hand - p_quantity`) and the
+schema has `CHECK (quantity_on_hand >= 0)`, so the second write recomputes
+against the committed 10, gets -10, and is refused by the constraint. The
+"both write 10" lost update described in `ARCHITECTURE.md` section 5 needs an
+*absolute* write, which this code never does.
 
-```sql
--- session 1
-begin;
-select quantity_on_hand from batches where id = '<batch>' for update;  -- 30, lock held
+What the lock does buy is a correct refusal. Without it, the second caller
+validates against a stale 30, passes, and is stopped only at write time with a
+raw constraint violation (SQLSTATE 23514) instead of the business error the UI
+knows how to explain. Defence in depth, in other words, with the layers
+proven separately: the CHECK protects the data, and the lock protects the
+answer the user gets.
 
--- session 2 (must BLOCK on the next line, not error)
-begin;
-select issue_stock('<batch>', 20, 'Ward usage');
-
--- session 1
-select issue_stock('<batch>', 20, 'Ward usage');   -- 30 -> 10
-commit;
-
--- session 2 now unblocks, re-reads 10, and must fail with INSUFFICIENT_STOCK.
-```
-
-If session 2 returns successfully, there is an oversell bug. Scheduled for the
-milestone 8 QA pass.
+The comment inside the deployed `issue_stock` body (from `0003`, kept in
+`0005`) says the `FOR UPDATE` clause is "the one that prevents overselling".
+That overstates it. It is left unedited on purpose, because the comment is part
+of a migration that has already been applied, and an applied migration is
+history: edit it, and the repository no longer describes what the database
+ran. A future migration can restate it if the function changes for another
+reason.
 
 **Token verification.** The test harness recreates `auth.uid()` to Supabase's
 contract, so these tests prove the *policies* are correct. They do not prove JWT

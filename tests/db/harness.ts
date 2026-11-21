@@ -40,7 +40,7 @@ const MIGRATIONS = [
 ];
 
 /** Recreates the parts of a Supabase project our migrations rely on. */
-const SUPABASE_SHIM = `
+export const SUPABASE_SHIM = `
   create role anon;
   create role authenticated;
   create role service_role;
@@ -121,7 +121,7 @@ export const BATCH_B = "dddddddd-0000-4000-8000-000000000003";
  * Balances and movements are inserted together so the audit invariant (deltas
  * sum to quantity_on_hand) holds from the very first row.
  */
-const SEED = `
+export const SEED = `
   insert into organizations (id, name, timezone) values
     ('${ORG_A}', 'Clinic A', 'Africa/Lagos'),
     ('${ORG_B}', 'Clinic B', 'UTC');
@@ -167,11 +167,20 @@ const SEED = `
     ('${ORG_B}', '${BATCH_B}',         'receipt', 55, 'Opening stock', '${ADMIN_B}');
 `;
 
+/**
+ * The five migrations, in order, as deployed. Shared with the real-server
+ * concurrency suite so both engines run byte-identical SQL.
+ */
+export function migrationSql(): string[] {
+  return MIGRATIONS.map((file) =>
+    readFileSync(join(process.cwd(), "supabase/migrations", file), "utf8"),
+  );
+}
+
 export async function freshDb(): Promise<PGlite> {
   const db = await PGlite.create();
   await db.exec(SUPABASE_SHIM);
-  for (const file of MIGRATIONS) {
-    const sql = readFileSync(join(process.cwd(), "supabase/migrations", file), "utf8");
+  for (const sql of migrationSql()) {
     await db.exec(sql);
   }
   await db.exec(SEED);

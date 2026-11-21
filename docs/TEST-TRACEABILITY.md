@@ -3,7 +3,7 @@
 Every row of the brief's acceptance table, and where it is verified.
 Run the suite with `npm test`.
 
-Status during Milestone 8: **174 passing, 2 deliberately deferred**, stable
+Status during Milestone 8: **178 passing, none deferred**, stable
 across three shuffled-order runs (`npm run test:shuffle`), in about 7 to 11
 seconds.
 
@@ -48,7 +48,7 @@ so it was fixed before anything else in Milestone 8:
 | No expiry date | No expiry recorded | `tests/expiry.test.ts` | pass |
 | Viewer tries to change stock | **Database** rejects it | `tests/db/database.test.ts` → "a viewer cannot receive, issue or adjust stock" | **pass** |
 | Clinic A queries Clinic B | No data returned | `tests/db/database.test.ts` → "Clinic B queries Clinic A and gets NOTHING" | **pass** |
-| Concurrent stock issue | No overselling | `FOR UPDATE` implemented + presence asserted; overlap test needs two connections | **partial** |
+| Concurrent stock issue | No overselling | `tests/concurrency/issue-race.test.ts` (4 tests, real PostgreSQL 18.6, several connections) | **pass** |
 | CSV/PDF export | Correct filtered data and totals | `tests/reports.test.ts` (31 tests) | **pass** |
 
 Milestone 4 added `tests/inventoryView.test.ts` (14 tests) covering the numbers
@@ -101,10 +101,14 @@ block intact and free of encoding damage, PDF paginated with correct page
 counts, both buttons disabled on an empty result. Same caveat as above -- it
 worked once, which is not the same as it works.
 
-## Why the remaining tests are `it.todo` rather than passing
+## The three tests that were `it.todo`, and how each was closed
 
-This matters more than the 63 that pass, and §15 assesses exactly this kind of
-honesty ("Do not claim success without evidence").
+None are deferred now. This section is kept as history, because the reasoning
+for leaving them deferred mattered more than the 63 tests that passed at the
+time, and §15 assesses exactly this kind of honesty ("Do not claim success
+without evidence"). Viewer write rejection and cross-tenant isolation were
+closed in Milestone 5 against real RLS (`tests/db/database.test.ts`);
+concurrency was closed in Milestone 8.
 
 **Viewer write rejection.** The client-side check is tested and passes, but that
 only proves the buttons are disabled. The brief's requirement is that the
@@ -128,6 +132,11 @@ prevent this across two browser tabs. A passing "concurrency test" written
 against it would manufacture confidence in precisely the area the brief calls
 the *critical implementation rule*. The fix is a PostgreSQL function using
 `SELECT ... FOR UPDATE`, and the test needs two real sessions.
+
+*Closed in Milestone 8* by `tests/concurrency/issue-race.test.ts`, which starts
+a real PostgreSQL server and races real connections. See the finding recorded
+in `docs/DATABASE.md`: the lock turned out to matter for a different reason
+than this paragraph assumed.
 
 A green suite that hides a known gap is worse than a suite with three honest
 `todo`s.

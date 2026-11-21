@@ -808,27 +808,10 @@ describe("concurrency", () => {
     expect(r.rows[0].src.toLowerCase()).toContain("for update");
   });
 
-  /**
-   * The real thing, still deferred -- and the reason is the test harness, not
-   * the code.
-   *
-   * PGlite is a single connection: one backend process, no second session to
-   * contend with. Two transactions cannot fight over a row lock here, so the
-   * oversell race cannot be reproduced, and a passing "concurrency test"
-   * written against this harness would be exactly the false confidence that
-   * broke the expired-batch test earlier in this project.
-   *
-   * To run it for real, two connections are needed:
-   *   1. txn A: begin; select ... from batches where id = X for update;
-   *   2. txn B: begin; select issue_stock(X, 20, ...)   -- must BLOCK here
-   *   3. txn A: issue 20; commit;
-   *   4. txn B unblocks, re-reads 10, and must fail with INSUFFICIENT_STOCK.
-   *
-   * That needs a real PostgreSQL server: `docker run postgres:18`, a local
-   * install, or a Supabase branch database. It is the last unverified claim in
-   * the security model and belongs in milestone 8's QA pass.
-   */
-  it.todo("two overlapping issues cannot oversell (needs two real connections)");
+  // The behavioural overlap test lives in tests/concurrency/issue-race.test.ts.
+  // It needs two real connections, which PGlite cannot provide, so it runs
+  // against a real PostgreSQL 18.6 server (embedded-postgres). Done in
+  // milestone 8, after being deferred here since milestone 5.
 });
 
 // ===========================================================================

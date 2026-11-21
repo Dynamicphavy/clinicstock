@@ -89,6 +89,14 @@ does, inside one transaction:
 the real remaining 10 and is correctly rejected. Balance and history commit
 together or not at all, so they can never disagree.
 
+> **Milestone 8 correction.** The "both write 10" lost update above assumes
+> each request writes an absolute value. The implemented `issue_stock` writes
+> relatively and the schema forbids negative balances, so without the lock the
+> data stays correct and the second request fails at write time with a raw
+> constraint error. The lock's real contribution is a correct business refusal
+> (`INSUFFICIENT_STOCK`) before any write. Both are proven against a real server
+> in `tests/concurrency/issue-race.test.ts`; see `DATABASE.md`.
+
 Functions needed: `receive_stock`, `issue_stock`, `adjust_stock`, `reverse_movement`.
 
 ## 6. Proposed folder structure

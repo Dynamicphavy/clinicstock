@@ -407,20 +407,22 @@ describe("tenant scoping (demo-mode shape only)", () => {
    */
 });
 
-describe("deferred to milestone 5", () => {
-  /**
-   * Brief section 11: "Concurrent stock issue -> no overselling".
-   * Untestable here, and NOT because it is hard -- because demo mode genuinely
-   * cannot provide the guarantee. JavaScript has no row lock, so two tabs can
-   * interleave read-modify-write and oversell.
-   *
-   * Milestone 5 implemented the fix (SELECT ... FOR UPDATE inside issue_stock)
-   * and proved the lock clause is deployed, but the overlapping-transaction
-   * test still cannot run: PGlite is a single connection. See the todo at the
-   * end of tests/db/database.test.ts -- it needs a real PostgreSQL server.
-   */
-  it.todo("needs two real connections: overlapping issues cannot oversell");
-});
+/**
+ * Brief section 11: "Concurrent stock issue -> no overselling".
+ * Untestable here, and NOT because it is hard -- because demo mode genuinely
+ * cannot provide the guarantee. JavaScript has no row lock, so two tabs can
+ * interleave read-modify-write and oversell.
+ *
+ * Milestone 5 implemented the fix (SELECT ... FOR UPDATE inside issue_stock)
+ * and proved the lock clause is deployed, but the overlapping-transaction
+ * test still cannot run: PGlite is a single connection. See the todo at the
+ * end of tests/db/database.test.ts -- it needs a real PostgreSQL server.
+ *
+ * DONE in milestone 8: tests/concurrency/issue-race.test.ts, against a real
+ * PostgreSQL 18.6 server with several connections. Demo mode still cannot
+ * provide the guarantee, and that is a documented limitation of demo mode,
+ * not a gap in the tests.
+ */
 
 describe("reset demo data", () => {
   it("restores the seeded dataset", async () => {

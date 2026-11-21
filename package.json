@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:shuffle": "vitest run --sequence.shuffle",
     "typecheck": "tsc --noEmit",
     "sql:bundle": "node scripts/bundle-sql.mjs",
     "sql:verify": "node scripts/verify-bundle.mjs",

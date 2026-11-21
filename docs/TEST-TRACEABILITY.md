@@ -3,7 +3,32 @@
 Every row of the brief's acceptance table, and where it is verified.
 Run the suite with `npm test`.
 
-Status after Milestone 7: **170 passing, 2 deliberately deferred.**
+Status during Milestone 8: **174 passing, 2 deliberately deferred**, stable
+across three shuffled-order runs (`npm run test:shuffle`), in about 7 to 11
+seconds.
+
+## Milestone 8 finding: the suite disagreed with itself
+
+The first clean re-run of Milestone 8 gave two different answers for the same
+commit: one run had its worker OOM-killed, the next failed 3 tests with no
+assertion message, one of them after 891 seconds. Cause: a fresh PostgreSQL
+(PGlite) per test, 62 of them, on a 3.7 GB machine whose swap had been filled
+by two dev servers an earlier session left running.
+
+A suite that gives different answers to the same question certifies nothing,
+so it was fixed before anything else in Milestone 8:
+
+- One database per file, restored before each test by `resetDb()`, which
+  resets the session role, the JWT claim and any aborted transaction, not just
+  the rows. It uses TRUNCATE because our own append-only trigger refuses DELETE.
+- `fingerprint()` hashes rows, grants, policies, triggers and session identity.
+  A test asserts that a dirtied-then-reset database matches a freshly built
+  one, and a control test proves the fingerprint changes on a single leftover
+  row.
+- Shuffled runs are the evidence that no test depends on another's leftovers.
+- Side effect: TRUNCATE skips row-level triggers, so append-only depends on no
+  client holding it. That is now asserted in the suite and in
+  `scripts/verify-bundle.mjs`.
 
 | § 11 test | Expected result | Covered by | Status |
 |---|---|---|---|

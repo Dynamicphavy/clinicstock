@@ -83,7 +83,9 @@ const writable = await db.query(
    from information_schema.role_table_grants
    where table_schema = 'public'
      and table_name in ('batches', 'stock_movements')
-     and privilege_type in ('INSERT', 'UPDATE', 'DELETE')
+     -- TRUNCATE included: it skips row-level triggers, so holding it would
+     -- bypass the append-only rule entirely.
+     and privilege_type in ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE')
      and grantee in ('anon', 'authenticated')`,
 );
 if (writable.rows.length > 0) {

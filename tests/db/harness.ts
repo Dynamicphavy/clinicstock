@@ -179,6 +179,117 @@ export async function freshDb(): Promise<PGlite> {
 }
 
 /**
+ * Return a shared database to the state freshDb() produced, without rebuilding
+ * PostgreSQL.
+ *
+ * WHY THIS EXISTS
+ *
+ * Milestone 5 built a fresh database per test. That is perfect isolation, and
+ * on a 3.7 GB machine with swap exhausted it was also 62 PostgreSQL instances
+ * in one worker: tests took up to 891 s each and the worker was eventually
+ * OOM-killed, so two runs of the same commit gave two different answers. A
+ * suite that disagrees with itself certifies nothing, so isolation is now
+ * restored by resetting one database per file instead.
+ *
+ * WHAT A ROW DELETE WOULD MISS -- each line below answers one of these:
+ *
+ *   1. An aborted transaction. If a test fails mid-transaction, every later
+ *      statement errors with "current transaction is aborted".
+ *   2. The session ROLE. A test that fails between `set role anon` and
+ *      `reset role` would hand the next test an anon session, and every
+ *      permission test after it would be testing the wrong identity.
+ *   3. The JWT claim GUC. Same failure, one level up: auth.uid() would still
+ *      return the previous test's user.
+ *   4. The append-only trigger. `delete from stock_movements` is REFUSED by
+ *      our own rule -- the cleanup would fail on the table that matters most.
+ *      TRUNCATE does not fire row-level triggers, which is why it is used here
+ *      and why no client role may ever hold the TRUNCATE privilege (asserted
+ *      in database.test.ts and in scripts/verify-bundle.mjs).
+ *
+ * The table list is read from the catalogue rather than written out, so a
+ * table added by a future migration cannot be forgotten by the reset.
+ */
+export async function resetDb(db: PGlite): Promise<void> {
+  // A bare ROLLBACK outside a transaction is only a warning in PostgreSQL.
+  await db.exec("rollback;");
+  await db.exec("reset role; select set_config('request.jwt.claims', '', false);");
+  await db.exec(`
+    do $reset$
+    declare
+      targets text;
+    begin
+      select string_agg(format('%I.%I', schemaname, tablename), ', ')
+        into targets
+        from pg_tables
+       where schemaname in ('public', 'auth');
+      execute 'truncate table ' || targets || ' restart identity cascade';
+    end
+    $reset$;
+  `);
+  await db.exec(SEED);
+}
+
+/**
+ * A digest of everything a test could leave behind: rows, privileges,
+ * policies, triggers and session identity.
+ *
+ * Columns whose values are generated fresh on every insert (random uuids,
+ * timestamps) are excluded, because a reset re-inserts the seed and those
+ * columns legitimately differ. Everything else must match a freshly built
+ * database exactly -- that comparison is what makes resetDb() trustworthy
+ * rather than merely plausible.
+ */
+export async function fingerprint(db: PGlite): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+
+  const tables = await db.query<{ schemaname: string; tablename: string }>(
+    `select schemaname, tablename from pg_tables
+      where schemaname in ('public', 'auth') order by 1, 2`,
+  );
+  for (const { schemaname, tablename } of tables.rows) {
+    const volatile = await db.query<{ column_name: string }>(
+      `select column_name from information_schema.columns
+        where table_schema = $1 and table_name = $2
+          and (data_type like 'timestamp%'
+               or column_default ilike '%gen_random_uuid%'
+               or column_default ilike '%now()%')`,
+      [schemaname, tablename],
+    );
+    const strip = volatile.rows.map((r) => r.column_name);
+    const r = await db.query<{ n: number; h: string }>(
+      `select count(*)::int as n,
+              md5(coalesce(string_agg(x::text, '|' order by x::text), '')) as h
+         from (select to_jsonb(t) - $1::text[] as x
+                 from ${schemaname}.${tablename} t) s`,
+      [strip],
+    );
+    out[`rows:${schemaname}.${tablename}`] = `${r.rows[0].n}:${r.rows[0].h}`;
+  }
+
+  const meta: Record<string, string> = {
+    table_grants: `select grantee, table_name, privilege_type
+                     from information_schema.role_table_grants
+                    where table_schema = 'public'`,
+    function_grants: `select grantee, routine_name, privilege_type
+                        from information_schema.role_routine_grants
+                       where routine_schema = 'public'`,
+    policies: `select tablename, policyname, cmd, qual, with_check from pg_policies`,
+    triggers: `select tgrelid::regclass::text, tgname, tgenabled
+                 from pg_trigger where not tgisinternal`,
+    session: `select current_user::text,
+                     coalesce(current_setting('request.jwt.claims', true), '')`,
+  };
+  for (const [key, sql] of Object.entries(meta)) {
+    const r = await db.query<{ h: string }>(
+      `select md5(coalesce(string_agg(x::text, '|' order by x::text), '')) as h
+         from (${sql}) x`,
+    );
+    out[key] = r.rows[0].h;
+  }
+  return out;
+}
+
+/**
  * Run queries as a signed-in user.
  *
  * `set role authenticated` is essential: the session user is a superuser, and

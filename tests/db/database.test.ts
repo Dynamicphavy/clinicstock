@@ -6,28 +6,93 @@
  * things on its own -- which is the only check that counts, because a client
  * can always be bypassed.
  *
- * Every test gets a fresh database. Shared mutable state between security tests
- * is how you end up with a suite that passes in one order and leaks in another.
+ * Every test starts from the freshly migrated state. Shared mutable state
+ * between security tests is how you end up with a suite that passes in one
+ * order and leaks in another.
+ *
+ * Milestone 5 got that by building a new PostgreSQL per test. Milestone 8
+ * found that 62 WASM PostgreSQL instances exhaust a 3.7 GB machine -- runs of
+ * the same commit disagreed, and the worker was OOM-killed. So there is now
+ * ONE database per file, and resetDb() restores it before each test.
+ *
+ * That trade is only acceptable with evidence, so the first describe block
+ * below proves the reset is complete (fingerprint equals a fresh database) and
+ * the suite is run with shuffled order (`npm run test:shuffle`).
  */
-import { beforeEach, afterEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import {
   ADMIN_A, ADMIN_B, BATCH_A_EXPIRED, BATCH_A_GOOD,
   OFFICER_A, ORG_A, ORG_B, PRODUCT_A, VIEWER_A,
-  asUser, expectFailure, freshDb,
+  asUser, expectFailure, fingerprint, freshDb, resetDb,
 } from "./harness";
 
 let db: PGlite;
 
-beforeEach(async () => {
+beforeAll(async () => {
   db = await freshDb();
+}, 120_000);
+
+beforeEach(async () => {
+  await resetDb(db);
 });
 
-afterEach(async () => {
+afterAll(async () => {
   // Guarded: if freshDb() threw, `db` is undefined and an unguarded close()
   // replaces the real error with "cannot read properties of undefined",
   // which is how one broken migration looked like ten broken tests.
   await db?.close();
+});
+
+describe("test isolation (milestone 8)", () => {
+  it("a reset returns the database to exactly the freshly migrated state", async () => {
+    // Dirty every kind of state resetDb() claims to clean, including the
+    // ones a row delete would miss.
+    await asUser(db, ADMIN_A, () =>
+      db.query("select issue_stock($1, 5, 'Ward round', null)", [BATCH_A_GOOD]),
+    );
+    await db.exec(`insert into categories (organization_id, name)
+                   values ('${ORG_A}', 'Leftover from a previous test')`);
+    await db.exec("select set_config('request.jwt.claims', '{\"sub\":\"" + VIEWER_A + "\"}', false);");
+    await db.exec("set role anon;");
+
+    await resetDb(db);
+
+    const reference = await freshDb();
+    try {
+      expect(await fingerprint(db)).toEqual(await fingerprint(reference));
+    } finally {
+      await reference.close();
+    }
+  }, 120_000);
+
+  it("the fingerprint is sensitive enough to fail on a leftover", async () => {
+    // Control case. Without it, the test above could pass because
+    // fingerprint() hashes nothing -- a check that cannot fail proves nothing.
+    const before = await fingerprint(db);
+    await db.exec(`insert into categories (organization_id, name)
+                   values ('${ORG_A}', 'One extra row')`);
+    const after = await fingerprint(db);
+    expect(after["rows:public.categories"]).not.toBe(before["rows:public.categories"]);
+  });
+
+  it("cleanup needs TRUNCATE because our own trigger refuses DELETE", async () => {
+    const e = await expectFailure(() => db.query("delete from stock_movements"));
+    expect(e.code).toBe("P0001");
+    expect(e.detail).toBe("APPEND_ONLY_VIOLATION");
+  });
+
+  it("no client role holds TRUNCATE, which would bypass append-only", async () => {
+    // Row-level triggers do not fire on TRUNCATE. The append-only rule is
+    // therefore only as strong as the absence of this privilege.
+    const r = await db.query<{ grantee: string; table_name: string }>(
+      `select grantee, table_name from information_schema.role_table_grants
+        where table_schema = 'public'
+          and privilege_type = 'TRUNCATE'
+          and grantee in ('anon', 'authenticated')`,
+    );
+    expect(r.rows).toEqual([]);
+  });
 });
 
 /** Balance of one batch, read with RLS bypassed, for assertions. */

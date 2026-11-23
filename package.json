@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "sql:bundle": "node scripts/bundle-sql.mjs",
     "sql:verify": "node scripts/verify-bundle.mjs",
-    "verify:live": "node --env-file=.env.local scripts/verify-live.mjs"
+    "verify:live": "node --env-file=.env.local scripts/verify-live.mjs",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "@hookform/resolvers": "^7.0.6",
@@ -42,6 +43,7 @@
     "pg": "8.23.1",
     "tailwindcss": "4.3.3",
     "typescript": "^5",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "wrangler": "4.163.0"
   }
 }

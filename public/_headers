@@ -1,0 +1,18 @@
+# Response headers for every file Cloudflare serves (copied into out/ at build).
+#
+# X-Frame-Options / frame-ancestors: no other site may embed ClinicStock in a
+#   frame. Without this, a hostile page could overlay invisible "Issue stock"
+#   buttons under its own (clickjacking) while the user is signed in.
+# nosniff: the browser must trust our Content-Type, not guess one.
+# Referrer-Policy: other sites never see our full URLs (they carry ?id=...).
+# Permissions-Policy: the app needs no camera, microphone or location.
+#
+# A full Content-Security-Policy is NOT set yet: Next.js injects inline
+# scripts, so a strict CSP needs hashes generated per build. Recorded as a gap
+# in docs/DEPLOYMENT.md rather than shipped half-working.
+/*
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

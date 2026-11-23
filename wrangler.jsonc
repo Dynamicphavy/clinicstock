@@ -1,0 +1,24 @@
+// Cloudflare deployment (brief section 10, Milestone 8).
+//
+// The brief says "Cloudflare Pages". By November 2026 Cloudflare is folding
+// Pages into Workers, and `wrangler pages project create` delegates to
+// Workers and fails. Workers "static assets" is the supported equivalent: no
+// `main` script, so no code runs on Cloudflare at all. Requests are served
+// straight from the uploaded `out/` folder, the same as Pages would.
+//
+// Deploy:  npm run build  &&  npm run deploy
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "clinicstock",
+  "compatibility_date": "2026-11-16",
+  "assets": {
+    "directory": "./out",
+    // /inventory -> /inventory/ -> inventory/index.html. Matches
+    // `trailingSlash: true` in next.config.ts.
+    "html_handling": "auto-trailing-slash",
+    // An unknown URL gets the export's own 404 page with a real 404 status,
+    // NOT index.html with a 200. A single-page-app fallback would make every
+    // typo look like a working page, and this app has real files per route.
+    "not_found_handling": "404-page"
+  }
+}

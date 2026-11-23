@@ -8,6 +8,15 @@ npm run build     # static export into out/, reads .env.local
 npm run deploy    # wrangler deploy, config in wrangler.jsonc
 ```
 
+## Verification record
+
+- 2026-11-23: deployed version `c8dd68fa`, labelled `git c413c11 (origin/main)`,
+  identical to `main` on GitHub. **The site loads in a browser**, confirmed by
+  a person. Not yet checked on the live site: the response headers, the 404
+  status for an unknown URL, the trailing-slash routes, and the signed-in flow
+  against Supabase. The dev machine cannot reach the host (see Known issues),
+  so these need a browser's devtools or another network.
+
 ## What is deployed, and what is not
 
 The whole app is static files: HTML, JS and CSS from `out/`. Cloudflare runs
